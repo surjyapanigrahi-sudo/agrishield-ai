@@ -14,7 +14,7 @@ BASE_DIR = Path(__file__).resolve().parent
 # Page Configuration
 # ---------------------------------------------------------
 st.set_page_config(
-    page_title="AgriShield AI | Smart Agriculture Advisory",
+    page_title="Kishan Mitra AI | Smart Agriculture Advisory",
     page_icon="🌾",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -314,7 +314,7 @@ except Exception as e:
 # ---------------------------------------------------------
 # Main Header
 # ---------------------------------------------------------
-st.markdown('<div class="main-title">🌾 AgriShield AI Platform</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">🌾 Kishan Mitra AI Platform</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">Real-time pest detection & localized multilingual treatment recommendations</div>', unsafe_allow_html=True)
 
 # ---------------------------------------------------------
@@ -486,7 +486,7 @@ with col3:
                     
                     # --- DOWNLOADABLE FIELD REPORT ---
                     report_content = f"""==================================================
-AGRISHIELD AI - FIELD ADVISORY REPORT
+KISHAN MITRA AI - FIELD ADVISORY REPORT
 ==================================================
 Detected Pest / Condition : {detected_pest}
 Model Confidence          : {confidence * 100:.1f}%
@@ -504,7 +504,7 @@ Kisan Call Center Hotline: 1800-180-1551
                     st.download_button(
                         label="📥 Download Advisory Report (TXT)",
                         data=report_content,
-                        file_name=f"AgriShield_Advisory_{detected_pest}.txt",
+                        file_name=f"Kishan_Mitra_Advisory_{detected_pest}.txt",
                         mime="text/plain"
                     )
 
