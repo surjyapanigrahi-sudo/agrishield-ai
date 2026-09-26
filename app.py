@@ -27,7 +27,7 @@ st.markdown("""
     <style>
     .block-container {
         padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
+        padding-bottom: 6rem !important;
     }
 
     header[data-testid="stHeader"] {
@@ -47,6 +47,40 @@ st.markdown("""
     section[data-testid="stSidebar"] {
         background-color: rgba(15, 23, 42, 0.90) !important;
         border-right: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stSidebarContent"] {
+        padding-top: 0.1rem !important;
+    }
+
+    section[data-testid="stSidebar"] div[data-testid="stSidebarUserContent"] {
+        padding-top: 0 !important;
+        margin-top: -3.25rem !important;
+    }
+
+    .ai-advisory-footer {
+        position: fixed;
+        left: 20rem;
+        right: 1.25rem;
+        bottom: 0.75rem;
+        z-index: 999;
+        padding: 0.75rem 1rem;
+        border: 1px solid rgba(245, 158, 11, 0.75);
+        border-radius: 12px;
+        background: rgba(69, 65, 31, 0.96);
+        color: #ffffff;
+        font-size: 0.92rem;
+        line-height: 1.35;
+        text-align: center;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+    }
+
+    @media (max-width: 768px) {
+        .ai-advisory-footer {
+            left: 0.75rem;
+            right: 0.75rem;
+            bottom: 0.5rem;
+        }
     }
     
     section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div {
@@ -228,44 +262,41 @@ GTTS_LANG_CODES = {
     "Telugu": "te"
 }
 
-# ---------------------------------------------------------
-# Sidebar Section 1: Parameters
-# ---------------------------------------------------------
-st.sidebar.markdown("### 🛠️ Inference Parameters")
+CROP_STAGES = {
+    "Wheat": ["Seedling", "Tillering", "Stem elongation", "Heading / Flowering", "Grain filling"],
+    "Maize": ["Seedling", "Vegetative", "Tasseling / Silking", "Grain filling"],
+}
 
-model_version = st.sidebar.radio(
-    "YOLO Model Engine",
-    ["v2", "v1"],
-    index=0,
-    help="Select v2 for higher accuracy on field pest datasets."
-)
+INDIAN_STATES = [
+    "Select state", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar",
+    "Chhattisgarh", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand",
+    "Karnataka", "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+    "Mizoram", "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
+    "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
+    "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+    "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
+]
 
-confidence_threshold = st.sidebar.slider(
-    "Confidence Threshold",
-    min_value=0.10,
-    max_value=0.95,
-    value=0.35,
-    step=0.05,
-    help="Increase this value if you encounter false detections."
-)
+# ---------------------------------------------------------
+# Fixed Inference Configuration
+# ---------------------------------------------------------
+model_version = "v2"
+confidence_threshold = 0.15
+
+# ---------------------------------------------------------
+# Sidebar Section 1: Farm & Crop Details
+# ---------------------------------------------------------
+st.sidebar.markdown("### 🌾 Farm & Crop Details")
+
+selected_crop = st.sidebar.selectbox("Crop", list(CROP_STAGES.keys()))
+selected_growth_stage = st.sidebar.selectbox("Growth stage", CROP_STAGES[selected_crop])
+selected_state = st.sidebar.selectbox("State / UT", INDIAN_STATES)
+selected_district = st.sidebar.text_input("District", placeholder="Enter district")
 
 st.sidebar.markdown("---")
 
 # ---------------------------------------------------------
-# Sidebar Section 2: Preferred Language
-# ---------------------------------------------------------
-st.sidebar.markdown("### 🌐 Preferred Language")
-
-language = st.sidebar.radio(
-    "Select Language for Advisory",
-    list(GTTS_LANG_CODES.keys()),
-    index=5
-)
-
-st.sidebar.markdown("---")
-
-# ---------------------------------------------------------
-# Sidebar Section 3: Dynamic Sample Image Reader (Compact)
+# Sidebar Section 2: Dynamic Sample Image Reader (Compact)
 # ---------------------------------------------------------
 st.sidebar.markdown("### 🖼️ Quick Demo Samples")
 
@@ -285,6 +316,19 @@ selected_sample_label = st.sidebar.selectbox(
     "Choose Target Sample",
     options=list(available_samples.keys()),
     index=0
+)
+
+st.sidebar.markdown("---")
+
+# ---------------------------------------------------------
+# Sidebar Section 3: Preferred Language
+# ---------------------------------------------------------
+st.sidebar.markdown("### 🌐 Preferred Language")
+
+language = st.sidebar.radio(
+    "Select Language for Advisory",
+    list(GTTS_LANG_CODES.keys()),
+    index=list(GTTS_LANG_CODES.keys()).index("Hindi")
 )
 
 # n8n Webhook for Multilingual Treatment Advisory Text
@@ -310,6 +354,31 @@ try:
 except Exception as e:
     st.error(f"Error loading model weights: {e}")
     model = None
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def fetch_advisory(pest, language_name, crop_name, crop_stage, state_name, district_name):
+    response = requests.post(
+        N8N_WEBHOOK_URL,
+        json={
+            "pest": pest,
+            "language": language_name,
+            "crop": crop_name,
+            "growth_stage": crop_stage,
+            "state": state_name,
+            "district": district_name,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def generate_advisory_audio(text, language_code):
+    audio_buffer = io.BytesIO()
+    gTTS(text=text, lang=language_code, slow=False).write_to_fp(audio_buffer)
+    return audio_buffer.getvalue()
 
 # ---------------------------------------------------------
 # Main Header
@@ -355,6 +424,10 @@ with col1:
         len(image_bytes) if image_bytes is not None else 0,
         model_version,
         confidence_threshold,
+        selected_crop,
+        selected_growth_stage,
+        selected_state,
+        selected_district.strip().lower(),
     )
     if st.session_state.get("input_signature") != input_signature:
         st.session_state["input_signature"] = input_signature
@@ -411,21 +484,22 @@ with col2:
             if res_json:
                 detections = res_json.get("detections", [])
                 if len(detections) > 0:
+                    detections = sorted(
+                        detections,
+                        key=lambda item: float(item.get("confidence", 0.0)),
+                        reverse=True,
+                    )
                     detected_pest = detections[0].get("pest_name", "unknown")
                     confidence = float(detections[0].get("confidence", 0.0))
-                    
+
                     st.markdown(
-                        f'<div class="inline-status-badge"><strong>Detected Condition:</strong> {detected_pest} ({confidence * 100:.1f}%)</div>', 
+                        f'<div class="inline-status-badge"><strong>Detected Condition:</strong> {detected_pest} ({confidence * 100:.1f}%)</div>',
                         unsafe_allow_html=True
                     )
-                    
+
+                    st.caption("AI confidence (not field infestation severity)")
                     st.progress(confidence)
-                    if confidence > 0.75:
-                        st.error("🚨 **High Severity:** Immediate intervention required within 24–48 hrs.")
-                    elif confidence > 0.40:
-                        st.warning("⚠️ **Moderate Severity:** Monitor crop density and isolate affected area.")
-                    else:
-                        st.info("ℹ️ **Low Severity:** Early indication. Apply preventive bio-pesticides.")
+                    st.info("✅ Detection passed the fixed 15% confidence threshold.")
 
                 else:
                     detected_pest = "unknown"
@@ -438,11 +512,6 @@ with col2:
                     img_bytes = base64.b64decode(res_json["annotated_image"])
                     annotated_img = Image.open(io.BytesIO(img_bytes))
                     st.image(annotated_img, caption="YOLO Bounding Box Visualization")
-    else:
-        st.markdown(
-            '<div class="custom-diagnostic-card">Select a sample image on the sidebar or upload an image to start.</div>', 
-            unsafe_allow_html=True
-        )
 
 # --- PORTION 3: TREATMENT ADVISORY, TTS AUDIO & DOWNLOADABLE REPORT ---
 with col3:
@@ -451,43 +520,40 @@ with col3:
     if detected_pest and detected_pest != "unknown":
         with st.spinner(f"Retrieving advisory in {language}..."):
             try:
-                payload = {
-                    "pest": detected_pest,
-                    "language": language
-                }
-                
-                n8n_res = requests.post(N8N_WEBHOOK_URL, json=payload, timeout=20)
-                
-                if n8n_res.status_code == 200:
-                    n8n_data = n8n_res.json()
-                    
-                    chemical_solution = n8n_data.get("chemical", "N/A")
-                    st.metric(label="Chemical Solution", value=chemical_solution)
-                    
-                    instructions = n8n_data.get("translated_instructions", "No advisory available.")
-                    st.info(f"**Instructions ({language}):**\n\n{instructions}")
-                    
-                    # --- MULTILINGUAL AUDIO TTS ---
-                    st.markdown("🔊 **Listen to Local Advisory:**")
-                    try:
-                        tts_lang = GTTS_LANG_CODES.get(language, "en")
-                        tts_text = f"{detected_pest}. {chemical_solution}. {instructions}"
-                        
-                        tts = gTTS(text=tts_text, lang=tts_lang, slow=False)
-                        fp = io.BytesIO()
-                        tts.write_to_fp(fp)
-                        fp.seek(0)
-                        
-                        st.audio(fp, format="audio/mp3")
-                    except Exception as audio_err:
-                        st.caption("🔊 *Audio player unavailable for selected language.*")
+                n8n_data = fetch_advisory(
+                    detected_pest,
+                    language,
+                    selected_crop,
+                    selected_growth_stage,
+                    selected_state,
+                    selected_district.strip(),
+                )
 
-                    st.markdown("---")
+                chemical_solution = n8n_data.get("chemical", "N/A")
+                st.metric(label="Chemical Solution", value=chemical_solution)
+
+                instructions = n8n_data.get("translated_instructions", "No advisory available.")
+                st.info(f"**Instructions ({language}):**\n\n{instructions}")
+
+                # --- MULTILINGUAL AUDIO TTS ---
+                st.markdown("🔊 **Listen to Local Advisory:**")
+                try:
+                    tts_lang = GTTS_LANG_CODES.get(language, "en")
+                    tts_text = f"{detected_pest}. {chemical_solution}. {instructions}"
+                    audio_bytes = generate_advisory_audio(tts_text, tts_lang)
+                    st.audio(audio_bytes, format="audio/mp3")
+                except Exception:
+                    st.caption("🔊 *Audio player unavailable for selected language.*")
+
+                st.markdown("---")
                     
-                    # --- DOWNLOADABLE FIELD REPORT ---
-                    report_content = f"""==================================================
+                # --- DOWNLOADABLE FIELD REPORT ---
+                report_content = f"""==================================================
 KISHAN MITRA AI - FIELD ADVISORY REPORT
 ==================================================
+Crop                       : {selected_crop}
+Growth Stage               : {selected_growth_stage}
+Location                   : {selected_district or 'Not provided'}, {selected_state}
 Detected Pest / Condition : {detected_pest}
 Model Confidence          : {confidence * 100:.1f}%
 Selected Advisory Language: {language}
@@ -501,24 +567,53 @@ COMMUNITY SUPPORT & HELPLINE:
 Kisan Call Center Hotline: 1800-180-1551
 ==================================================
 """
-                    st.download_button(
-                        label="📥 Download Advisory Report (TXT)",
-                        data=report_content,
-                        file_name=f"Kishan_Mitra_Advisory_{detected_pest}.txt",
-                        mime="text/plain"
-                    )
-
-                else:
-                    st.error(f"n8n Workflow Error: {n8n_res.status_code}")
+                st.download_button(
+                    label="📥 Download Advisory Report (TXT)",
+                    data=report_content,
+                    file_name=f"Kishan_Mitra_Advisory_{detected_pest}.txt",
+                    mime="text/plain"
+                )
 
             except Exception as e:
                 st.error("Error communicating with n8n advisory agent.")
                 st.caption(f"Details: {e}")
 
     elif detected_pest == "unknown":
-        st.info("💡 **Tip:** Try lowering the **Confidence Threshold** slider in the sidebar or select a different sample image.")
-    else:
-        st.markdown(
-            '<div class="custom-diagnostic-card">Scan results and localized treatment manuals will appear here after diagnostic processing.</div>', 
-            unsafe_allow_html=True
+        st.info("💡 **No detection above 15%:** Try a clearer close-up or select a different sample image.")
+
+if st.session_state.get("last_detection"):
+    with st.expander("💬 Farmer Feedback"):
+        feedback_choice = st.radio(
+            "Was this diagnosis helpful?",
+            ["Yes", "No", "Not sure"],
+            horizontal=True,
+            index=None,
         )
+        feedback_note = st.text_input(
+            "Optional note",
+            placeholder="Tell us what looked right or wrong",
+        )
+        if st.button("Submit feedback"):
+            if feedback_choice is None:
+                st.warning("Please select Yes, No, or Not sure.")
+            else:
+                st.session_state.setdefault("farmer_feedback", []).append(
+                    {
+                        "crop": selected_crop,
+                        "growth_stage": selected_growth_stage,
+                        "state": selected_state,
+                        "district": selected_district.strip(),
+                        "image": image_filename,
+                        "diagnosis": detected_pest,
+                        "helpful": feedback_choice,
+                        "note": feedback_note.strip(),
+                    }
+                )
+                st.success("Thank you. Your feedback has been recorded for this session.")
+
+st.markdown(
+    '<div class="ai-advisory-footer"><strong>AI-generated advisory.</strong> '
+    'Confirm pesticide selection and dosage with a qualified agricultural expert or local '
+    'agriculture officer before application.</div>',
+    unsafe_allow_html=True,
+)
