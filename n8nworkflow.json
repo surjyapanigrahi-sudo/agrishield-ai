@@ -1,0 +1,102 @@
+{
+  "name": "Agricultural Pest & Chemical Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "pest-action",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1a2b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [
+        250,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Read incoming data from Streamlit / Webhook payload\nconst body = $json.body || $json;\nconst pest = body.pest || \"army_worm\";\nconst language = body.language || \"Hindi\";\n\n// Dictionary mapping model classes to chemical compositions & dosages\nconst chemicalDatabase = {\n  \"army_worm\": {\n    chemical: \"Emamectin Benzoate 5% SG\",\n    dosage: \"4 grams per 10 Liters of water (or 80g/acre)\",\n    safety: \"Apply during early morning or late evening when larvae feed. Ensure thorough spray on whorls and foliage.\"\n  },\n  \"wheat rust\": {\n    chemical: \"Propiconazole 25% EC\",\n    dosage: \"1 ml per Liter of water (or 200ml/acre)\",\n    safety: \"Spray at the first appearance of pustules on leaves. Repeat after 14 days if rust symptoms persist.\"\n  },\n  \"wheat smut\": {\n    chemical: \"Tebuconazole 2% DS (Seed Treatment) / Propiconazole\",\n    dosage: \"1.5 grams per kg of seeds (for seed treatment) or 1 ml/L (foliar spray)\",\n    safety: \"Treat seeds prior to sowing or apply systemic fungicide during early boot stage.\"\n  },\n  \"diseases\": {\n    chemical: \"Mancozeb 75% WP (Broad-Spectrum Fungicide)\",\n    dosage: \"2 grams per Liter of water (or 400g/acre)\",\n    safety: \"Covers general foliar spots and fungal lesions. Spray uniformly over affected crop canopy.\"\n  },\n  \"Healthy wheat\": {\n    chemical: \"No Chemical Treatment Required\",\n    dosage: \"N/A\",\n    safety: \"Crop is healthy. Maintain proper balanced NPK fertilization, soil moisture, and periodic crop scouting.\"\n  }\n};\n\n// Fallback to general broad-spectrum treatment if label mismatch occurs\nconst selectedInfo = chemicalDatabase[pest] || chemicalDatabase[\"diseases\"];\n\n// Return structured output for the AI translation node\nreturn [{\n  json: {\n    pest: pest,\n    target_language: language,\n    chemical: selectedInfo.chemical,\n    dosage: selectedInfo.dosage,\n    safety: selectedInfo.safety\n  }\n}];"
+      },
+      "id": "2b3c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+      "name": "Code",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {},
+        "prompt": "=You are an agricultural expert assistant. Translate the following chemical treatment instructions into {{ $json.target_language }}. Keep the chemical names in standard English text, but translate the dosage and safety instructions clearly for a farmer.\n\nChemical: {{ $json.chemical }}\nDosage: {{ $json.dosage }}\nSafety Instructions: {{ $json.safety }}"
+      },
+      "id": "3c4d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+      "name": "OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"pest\": \"{{ $('Code').item.json.pest }}\",\n  \"chemical\": \"{{ $('Code').item.json.chemical }}\",\n  \"target_language\": \"{{ $('Code').item.json.target_language }}\",\n  \"translated_instructions\": \"{{ $json.message?.content || $json.text || $json.output }}\"\n}",
+        "options": {}
+      },
+      "id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        920,
+        300
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "OpenAI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
