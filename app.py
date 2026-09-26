@@ -5,6 +5,8 @@ import io
 import base64
 import os
 from gtts import gTTS
+from ultralytics import YOLO
+import numpy as np
 
 # ---------------------------------------------------------
 # Page Configuration
@@ -21,18 +23,15 @@ st.set_page_config(
 # ---------------------------------------------------------
 st.markdown("""
     <style>
-    /* Reduce top and bottom padding of main page */
     .block-container {
         padding-top: 1rem !important;
         padding-bottom: 1rem !important;
     }
 
-    /* Transparent Top Header Bar */
     header[data-testid="stHeader"] {
         background-color: transparent !important;
     }
 
-    /* Background Setup */
     .stApp {
         background: linear-gradient(rgba(15, 23, 42, 0.25), rgba(15, 23, 42, 0.3)), 
                     url('https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=2000&auto=format&fit=crop');
@@ -43,13 +42,11 @@ st.markdown("""
         font-family: 'Inter', -apple-system, sans-serif;
     }
 
-    /* Dark Glass Sidebar Container */
     section[data-testid="stSidebar"] {
         background-color: rgba(15, 23, 42, 0.90) !important;
         border-right: 1px solid rgba(255, 255, 255, 0.2);
     }
     
-    /* TIGHT SIDEBAR SPACING FIXES */
     section[data-testid="stSidebar"] div[data-testid="stVerticalBlock"] > div {
         gap: 0.35rem !important;
     }
@@ -67,7 +64,6 @@ st.markdown("""
         font-size: 1.05rem !important;
     }
 
-    /* Sidebar Headers, Labels & Text */
     section[data-testid="stSidebar"] h1,
     section[data-testid="stSidebar"] h2,
     section[data-testid="stSidebar"] h3,
@@ -78,13 +74,11 @@ st.markdown("""
         font-weight: 600 !important;
     }
 
-    /* FIX SELECTBOX VISIBILITY IN SIDEBAR */
     section[data-testid="stSidebar"] div[data-baseweb="select"] * {
         color: #0f172a !important;
         font-weight: 600 !important;
     }
 
-    /* Main Page Titles */
     .main-title {
         font-size: 2.2rem;
         font-weight: 800;
@@ -102,7 +96,6 @@ st.markdown("""
         text-shadow: 0 2px 6px rgba(0, 0, 0, 0.9);
     }
 
-    /* Column Section Labels */
     .section-label {
         color: #ffffff;
         font-size: 1.15rem;
@@ -112,7 +105,6 @@ st.markdown("""
         height: 30px;
     }
 
-    /* COMPACT & WIDE FILE UPLOADER FIX */
     div[data-testid="stFileUploader"] {
         width: 100% !important;
     }
@@ -135,7 +127,6 @@ st.markdown("""
         font-size: 0.85rem !important;
     }
 
-    /* IMAGE SIZE CONSTRAINTS */
     div[data-testid="stImage"] img {
         max-height: 240px !important;
         object-fit: contain !important;
@@ -159,7 +150,6 @@ st.markdown("""
         text-align: center;
     }
 
-    /* Action Button */
     .stButton>button {
         background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%) !important;
         color: #ffffff !important;
@@ -178,7 +168,6 @@ st.markdown("""
         box-shadow: 0 6px 20px rgba(34, 197, 94, 0.6);
     }
 
-    /* Inline Status Badge */
     .inline-status-badge {
         background-color: rgba(15, 23, 42, 0.92);
         border: 1px solid rgba(34, 197, 94, 0.5);
@@ -197,13 +186,11 @@ st.markdown("""
         margin-right: 5px;
     }
 
-    /* Metric Display */
     div[data-testid="stMetricValue"] {
         color: #4ade80 !important;
         font-weight: 800;
     }
 
-    /* Recommendation Box High Contrast */
     div[data-testid="stAlert"] {
         background-color: rgba(15, 23, 42, 0.92) !important;
         border: 1px solid rgba(34, 197, 94, 0.5) !important;
@@ -298,9 +285,24 @@ selected_sample_label = st.sidebar.selectbox(
     index=0
 )
 
-# Endpoints (LOCAL MODE DEFAULT)
-FASTAPI_ENDPOINT = "http://localhost:8000/predict"
+# n8n Webhook for Multilingual Treatment Advisory Text
 N8N_WEBHOOK_URL = "https://surjyanp.app.n8n.cloud/webhook/pest-action"
+
+# ---------------------------------------------------------
+# Local YOLO Model Caching and Loading
+# ---------------------------------------------------------
+@st.cache_resource
+def load_yolo_model(version):
+    weight_file = "best_v2.pt" if version == "v2" else "best_v1.pt"
+    if not os.path.exists(weight_file):
+        weight_file = "best_v1.pt"  # Fallback if v2 is missing
+    return YOLO(weight_file)
+
+try:
+    model = load_yolo_model(model_version)
+except Exception as e:
+    st.error(f"Error loading model weights: {e}")
+    model = None
 
 # ---------------------------------------------------------
 # Main Header
@@ -344,40 +346,48 @@ with col1:
     if image_to_display:
         st.image(image_to_display, caption=f"Input Image: {image_filename}")
 
-# --- PORTION 2: AI DIAGNOSTICS & THREAT ASSESSMENT ---
+# --- PORTION 2: AI DIAGNOSTICS & THREAT ASSESSMENT (LOCAL YOLO) ---
 with col2:
     st.markdown('<div class="section-label">🔬 2. AI Diagnostics</div>', unsafe_allow_html=True)
     
-    if image_bytes is not None:
+    if image_to_display is not None:
         scan_clicked = st.button("RUN DIAGNOSTIC SCAN 🚀")
 
         if scan_clicked or "last_detection" in st.session_state:
             if scan_clicked:
-                with st.spinner("Analyzing image..."):
-                    try:
-                        files = {"file": (image_filename, image_bytes, "image/jpeg")}
-                        data_payload = {
-                            "model_version": model_version,
-                            "conf": confidence_threshold
-                        }
-                        
-                        fastapi_res = requests.post(
-                            FASTAPI_ENDPOINT, 
-                            files=files, 
-                            data=data_payload, 
-                            timeout=15
-                        )
-                        
-                        if fastapi_res.status_code == 200:
-                            st.session_state["last_detection"] = fastapi_res.json()
-                        else:
-                            st.error(f"FastAPI Backend Error ({fastapi_res.status_code})")
-                            st.session_state["last_detection"] = None
+                if model is None:
+                    st.error("YOLO model weights are not loaded.")
+                else:
+                    with st.spinner("Analyzing image locally..."):
+                        try:
+                            # Run local inference
+                            results = model(image_to_display, conf=confidence_threshold)
+                            res = results[0]
+                            
+                            detections_list = []
+                            for box in res.boxes:
+                                cls_id = int(box.cls[0])
+                                conf_val = float(box.conf[0])
+                                p_name = model.names.get(cls_id, "unknown")
+                                detections_list.append({"pest_name": p_name, "confidence": conf_val})
+                            
+                            # Render annotated image
+                            annotated_arr = res.plot()  # BGR numpy array
+                            annotated_rgb = annotated_arr[..., ::-1] # Convert BGR to RGB
+                            
+                            pil_annotated = Image.fromarray(annotated_rgb)
+                            buffered = io.BytesIO()
+                            pil_annotated.save(buffered, format="JPEG")
+                            encoded_img = base64.b64encode(buffered.getvalue()).decode()
 
-                    except Exception as e:
-                        st.error("Failed to connect to backend server.")
-                        st.caption(f"Details: {e}")
-                        st.session_state["last_detection"] = None
+                            st.session_state["last_detection"] = {
+                                "detections": detections_list,
+                                "annotated_image": encoded_img
+                            }
+                        except Exception as e:
+                            st.error("Error during local model inference.")
+                            st.caption(f"Details: {e}")
+                            st.session_state["last_detection"] = None
 
             # Render Detection & Severity Gauge
             res_json = st.session_state.get("last_detection")
@@ -392,7 +402,6 @@ with col2:
                         unsafe_allow_html=True
                     )
                     
-                    # Threat Severity Gauge
                     st.progress(confidence)
                     if confidence > 0.75:
                         st.error("🚨 **High Severity:** Immediate intervention required within 24–48 hrs.")
@@ -441,7 +450,7 @@ with col3:
                     instructions = n8n_data.get("translated_instructions", "No advisory available.")
                     st.info(f"**Instructions ({language}):**\n\n{instructions}")
                     
-                    # --- FEATURE 1: MULTILINGUAL AUDIO TTS ---
+                    # --- MULTILINGUAL AUDIO TTS ---
                     st.markdown("🔊 **Listen to Local Advisory:**")
                     try:
                         tts_lang = GTTS_LANG_CODES.get(language, "en")
@@ -458,7 +467,7 @@ with col3:
 
                     st.markdown("---")
                     
-                    # --- FEATURE 3: DOWNLOADABLE FIELD REPORT ---
+                    # --- DOWNLOADABLE FIELD REPORT ---
                     report_content = f"""==================================================
 AGRISHIELD AI - FIELD ADVISORY REPORT
 ==================================================
