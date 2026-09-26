@@ -1,2 +1,9 @@
-*.pt
-samples/
+.venv/
+.venv-1/
+.idea/
+.vscode/
+__pycache__/
+*.py[cod]
+
+# Keep the two trained deployment models, but ignore downloaded base models.
+yolov8n.pt

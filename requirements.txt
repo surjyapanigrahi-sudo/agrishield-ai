@@ -1,6 +1,8 @@
-streamlit
-ultralytics
-Pillow
-opencv-python-headless
-gTTS
-numpy
+streamlit>=1.40,<2
+ultralytics>=8.3,<9
+opencv-python-headless>=4.10,<5
+Pillow>=10,<13
+numpy>=1.26,<3
+requests>=2.32,<3
+gTTS>=2.5,<3
+click>=7.1,<8.2

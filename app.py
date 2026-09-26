@@ -4,9 +4,11 @@ from PIL import Image
 import io
 import base64
 import os
+from pathlib import Path
 from gtts import gTTS
 from ultralytics import YOLO
-import numpy as np
+
+BASE_DIR = Path(__file__).resolve().parent
 
 # ---------------------------------------------------------
 # Page Configuration
@@ -267,7 +269,7 @@ st.sidebar.markdown("---")
 # ---------------------------------------------------------
 st.sidebar.markdown("### 🖼️ Quick Demo Samples")
 
-SAMPLES_DIR = "samples"
+SAMPLES_DIR = BASE_DIR / "samples"
 available_samples = {"None (Upload Custom File)": None}
 
 if os.path.exists(SAMPLES_DIR):
@@ -277,7 +279,7 @@ if os.path.exists(SAMPLES_DIR):
         if fname.lower().endswith(valid_extensions):
             clean_name = os.path.splitext(fname)[0].replace("_", " ").replace("-", " ").title()
             label = f"🐛 {clean_name} ({fname})"
-            available_samples[label] = os.path.join(SAMPLES_DIR, fname)
+            available_samples[label] = SAMPLES_DIR / fname
 
 selected_sample_label = st.sidebar.selectbox(
     "Choose Target Sample",
@@ -293,10 +295,15 @@ N8N_WEBHOOK_URL = "https://surjyanp.app.n8n.cloud/webhook/pest-action"
 # ---------------------------------------------------------
 @st.cache_resource
 def load_yolo_model(version):
-    weight_file = "best_v2.pt" if version == "v2" else "best_v1.pt"
-    if not os.path.exists(weight_file):
-        weight_file = "best_v1.pt"  # Fallback if v2 is missing
-    return YOLO(weight_file)
+    requested_file = BASE_DIR / ("best_v2.pt" if version == "v2" else "best_v1.pt")
+    fallback_file = BASE_DIR / "best_v1.pt"
+    weight_file = requested_file if requested_file.exists() else fallback_file
+    if not weight_file.exists():
+        raise FileNotFoundError(
+            "YOLO model weights are missing. Expected best_v1.pt or best_v2.pt "
+            f"in {BASE_DIR}."
+        )
+    return YOLO(str(weight_file))
 
 try:
     model = load_yolo_model(model_version)
@@ -337,11 +344,21 @@ with col1:
         image_bytes = uploaded_file.getvalue()
         image_filename = uploaded_file.name
         image_to_display = Image.open(uploaded_file)
-    elif sample_path and os.path.exists(sample_path):
-        with open(sample_path, "rb") as f:
+    elif sample_path and sample_path.exists():
+        with sample_path.open("rb") as f:
             image_bytes = f.read()
-        image_filename = os.path.basename(sample_path)
+        image_filename = sample_path.name
         image_to_display = Image.open(sample_path)
+
+    input_signature = (
+        image_filename,
+        len(image_bytes) if image_bytes is not None else 0,
+        model_version,
+        confidence_threshold,
+    )
+    if st.session_state.get("input_signature") != input_signature:
+        st.session_state["input_signature"] = input_signature
+        st.session_state.pop("last_detection", None)
 
     if image_to_display:
         st.image(image_to_display, caption=f"Input Image: {image_filename}")
