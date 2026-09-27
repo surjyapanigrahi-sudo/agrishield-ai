@@ -333,6 +333,10 @@ language = st.sidebar.radio(
 
 # n8n Webhook for Multilingual Treatment Advisory Text
 N8N_WEBHOOK_URL = "https://surjyanp.app.n8n.cloud/webhook/pest-action"
+FEEDBACK_WEBHOOK_URL = os.getenv(
+    "N8N_FEEDBACK_WEBHOOK_URL",
+    "https://surjyanp.app.n8n.cloud/webhook/agrishield-feedback",
+)
 
 # ---------------------------------------------------------
 # Local YOLO Model Caching and Loading
@@ -372,6 +376,25 @@ def fetch_advisory(pest, language_name, crop_name, crop_stage, state_name, distr
     )
     response.raise_for_status()
     return response.json()
+
+
+def submit_feedback(crop, growth_stage, state, district, image, diagnosis, helpful, note):
+    response = requests.post(
+        FEEDBACK_WEBHOOK_URL,
+        json={
+            "crop": crop,
+            "growth_stage": growth_stage,
+            "state": state,
+            "district": district,
+            "image": image,
+            "diagnosis": diagnosis,
+            "helpful": helpful,
+            "note": note,
+        },
+        timeout=20,
+    )
+    response.raise_for_status()
+    return response.json() if response.content else {"status": "success"}
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -583,33 +606,42 @@ Kisan Call Center Hotline: 1800-180-1551
 
 if st.session_state.get("last_detection"):
     with st.expander("💬 Farmer Feedback"):
-        feedback_choice = st.radio(
-            "Was this diagnosis helpful?",
-            ["Yes", "No", "Not sure"],
-            horizontal=True,
-            index=None,
-        )
-        feedback_note = st.text_input(
-            "Optional note",
-            placeholder="Tell us what looked right or wrong",
-        )
-        if st.button("Submit feedback"):
+        with st.form("farmer_feedback_form", clear_on_submit=True):
+            feedback_choice = st.radio(
+                "Was this diagnosis helpful?",
+                ["Yes", "No", "Not sure"],
+                horizontal=True,
+                index=None,
+            )
+            feedback_note = st.text_area(
+                "Optional note",
+                placeholder="Tell us what looked right or wrong",
+            )
+            feedback_submitted = st.form_submit_button("Submit feedback")
+
+        if feedback_submitted:
             if feedback_choice is None:
                 st.warning("Please select Yes, No, or Not sure.")
             else:
-                st.session_state.setdefault("farmer_feedback", []).append(
-                    {
-                        "crop": selected_crop,
-                        "growth_stage": selected_growth_stage,
-                        "state": selected_state,
-                        "district": selected_district.strip(),
-                        "image": image_filename,
-                        "diagnosis": detected_pest,
-                        "helpful": feedback_choice,
-                        "note": feedback_note.strip(),
-                    }
-                )
-                st.success("Thank you. Your feedback has been recorded for this session.")
+                try:
+                    with st.spinner("Submitting feedback..."):
+                        result = submit_feedback(
+                            selected_crop,
+                            selected_growth_stage,
+                            selected_state,
+                            selected_district.strip(),
+                            image_filename or "",
+                            detected_pest or "",
+                            feedback_choice,
+                            feedback_note.strip(),
+                        )
+                    if result.get("status") == "success":
+                        st.success("Thank you. Your feedback has been saved.")
+                    else:
+                        st.error("The feedback service returned an unexpected response.")
+                except requests.RequestException as e:
+                    st.error("Could not submit feedback. Please try again.")
+                    st.caption(f"Details: {e}")
 
 st.markdown(
     '<div class="ai-advisory-footer"><strong>AI-generated advisory.</strong> '
