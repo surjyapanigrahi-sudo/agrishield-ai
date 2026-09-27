@@ -247,6 +247,70 @@ st.markdown("""
         color: #4ade80 !important;
         font-weight: 700 !important;
     }
+
+    /* Keep the feedback form readable over the photographic background. */
+    div[data-testid="stExpander"] details {
+        overflow: hidden !important;
+        background: rgba(15, 23, 42, 0.96) !important;
+        border: 1px solid rgba(255, 255, 255, 0.24) !important;
+        border-radius: 12px !important;
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.45) !important;
+        backdrop-filter: blur(12px) !important;
+    }
+
+    div[data-testid="stExpander"] details > summary {
+        background: rgba(15, 23, 42, 0.98) !important;
+    }
+
+    div[data-testid="stExpander"] details > summary,
+    div[data-testid="stExpander"] details > summary * {
+        color: #ffffff !important;
+        fill: #ffffff !important;
+        font-weight: 700 !important;
+    }
+
+    div[data-testid="stExpander"] div[data-testid="stForm"] {
+        padding: 0.25rem 0.25rem 0.5rem !important;
+    }
+
+    div[data-testid="stExpander"] label,
+    div[data-testid="stExpander"] label p,
+    div[data-testid="stExpander"] div[role="radiogroup"] label,
+    div[data-testid="stExpander"] div[role="radiogroup"] label * {
+        color: #ffffff !important;
+        opacity: 1 !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stExpander"] textarea {
+        color: #0f172a !important;
+        background: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        caret-color: #0f172a !important;
+    }
+
+    div[data-testid="stExpander"] textarea::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+    }
+
+    div[data-testid="stExpander"] div[data-testid="stFormSubmitButton"] button {
+        min-width: 180px !important;
+        height: 48px !important;
+        padding: 0.5rem 1rem !important;
+        color: #ffffff !important;
+        background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%) !important;
+        border: none !important;
+        border-radius: 10px !important;
+        box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
+        font-size: 0.95rem !important;
+        font-weight: 700 !important;
+    }
+
+    div[data-testid="stExpander"] div[data-testid="stFormSubmitButton"] button:hover {
+        background: linear-gradient(90deg, #16a34a 0%, #15803d 100%) !important;
+        transform: translateY(-1px);
+    }
     </style>
 """, unsafe_allow_html=True)
 
