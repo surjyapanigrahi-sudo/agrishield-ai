@@ -347,8 +347,8 @@ INDIAN_STATES = [
 # ---------------------------------------------------------
 # Fixed Inference Configuration
 # ---------------------------------------------------------
-model_version = "v2"
-confidence_threshold = 0.15
+model_version = st.sidebar.selectbox("Detection model", ["v3_slot1", "v2", "v1"], format_func=lambda x: {"v3_slot1": "Wheat v3 Slot 1 (Experimental)", "v2": "Wheat v2", "v1": "Wheat v1"}[x])
+confidence_threshold = 0.10
 
 # ---------------------------------------------------------
 # Sidebar Section 1: Farm & Crop Details
@@ -410,14 +410,10 @@ FEEDBACK_WEBHOOK_URL = os.getenv(
 # ---------------------------------------------------------
 @st.cache_resource
 def load_yolo_model(version):
-    requested_file = BASE_DIR / ("best_v2.pt" if version == "v2" else "best_v1.pt")
-    fallback_file = BASE_DIR / "best_v1.pt"
-    weight_file = requested_file if requested_file.exists() else fallback_file
-    if not weight_file.exists():
-        raise FileNotFoundError(
-            "YOLO model weights are missing. Expected best_v1.pt or best_v2.pt "
-            f"in {BASE_DIR}."
-        )
+    filenames = {"v1": "best_v1.pt", "v2": "best_v2.pt", "v3_slot1": "best.pt"}
+    weight_file = BASE_DIR / filenames[version]
+    if not weight_file.is_file():
+        raise FileNotFoundError(f"Missing {weight_file.name} in {BASE_DIR}")
     return YOLO(str(weight_file))
 
 try:
@@ -591,7 +587,7 @@ with col2:
 
                     st.caption("AI confidence (not field infestation severity)")
                     st.progress(confidence)
-                    st.info("✅ Detection passed the fixed 15% confidence threshold.")
+                    st.info("✅ Detection passed the fixed 10% confidence threshold.")
 
                 else:
                     detected_pest = "unknown"
@@ -610,6 +606,8 @@ with col3:
     st.markdown('<div class="section-label">📋 3. Treatment Advisory</div>', unsafe_allow_html=True)
     
     if detected_pest and detected_pest != "unknown":
+        if model_version == "v3_slot1":
+            st.warning("Experimental v3: advisory has not been validated for all new classes. Confirm diagnosis and treatment with a qualified agricultural expert before field use.")
         with st.spinner(f"Retrieving advisory in {language}..."):
             try:
                 n8n_data = fetch_advisory(
@@ -622,7 +620,9 @@ with col3:
                 )
 
                 chemical_solution = n8n_data.get("chemical", "N/A")
-                st.metric(label="Chemical Solution", value=chemical_solution)
+                if model_version == "v3_slot1":
+                    st.caption("Unverified n8n response — for workflow testing only, not field use.")
+                st.metric(label="Chemical Solution (unverified)" if model_version == "v3_slot1" else "Chemical Solution", value=chemical_solution)
 
                 instructions = n8n_data.get("translated_instructions", "No advisory available.")
                 st.info(f"**Instructions ({language}):**\n\n{instructions}")
@@ -671,7 +671,7 @@ Kisan Call Center Hotline: 1800-180-1551
                 st.caption(f"Details: {e}")
 
     elif detected_pest == "unknown":
-        st.info("💡 **No detection above 15%:** Try a clearer close-up or select a different sample image.")
+        st.info("💡 **No detection above 10%:** Try a clearer close-up or select a different sample image.")
 
 if st.session_state.get("last_detection"):
     with st.expander("💬 Farmer Feedback"):

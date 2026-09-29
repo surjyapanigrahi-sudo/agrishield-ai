@@ -7,3 +7,4 @@ __pycache__/
 
 # Keep the two trained deployment models, but ignore downloaded base models.
 yolov8n.pt
+model_backups/

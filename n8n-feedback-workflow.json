@@ -1,0 +1,102 @@
+{
+  "name": "Kishan Mitra Feedback to Google Sheet",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "agrishield-feedback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "baea611a-f377-458a-b5d1-3d0d05145150",
+      "name": "Feedback Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [0, 0],
+      "webhookId": "6678b31d-a758-4a96-9f14-e51b9109e9e8"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "mode": "id",
+          "value": "1uIYn5o3cK7J551zVFNDKgT5ZDSJlOz2VF36gee65C3E"
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "name",
+          "value": "Sheet1"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Timestamp": "={{ $now.toISO() }}",
+            "Name": "={{ $json.body.name }}",
+            "Mobile": "={{ $json.body.mobile }}",
+            "Crop": "={{ $json.body.crop }}",
+            "Growth Stage": "={{ $json.body.growth_stage }}",
+            "State": "={{ $json.body.state }}",
+            "District": "={{ $json.body.district }}",
+            "Image": "={{ $json.body.image }}",
+            "Diagnosis": "={{ $json.body.diagnosis }}",
+            "Helpful": "={{ $json.body.helpful }}",
+            "Note": "={{ $json.body.note }}"
+          },
+          "schema": [
+            { "id": "Timestamp", "displayName": "Timestamp", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Name", "displayName": "Name", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Mobile", "displayName": "Mobile", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Crop", "displayName": "Crop", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Growth Stage", "displayName": "Growth Stage", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "State", "displayName": "State", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "District", "displayName": "District", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Image", "displayName": "Image", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Diagnosis", "displayName": "Diagnosis", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Helpful", "displayName": "Helpful", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false },
+            { "id": "Note", "displayName": "Note", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": false }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3ae42f2c-44cd-4b53-a779-555da7339ad3",
+      "name": "Save Feedback",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [224, 0],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "rL1hQ13GKTHHbGsU",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \"status\": \"success\", \"message\": \"Feedback saved successfully\" } }}",
+        "options": { "responseCode": 200 }
+      },
+      "id": "3bcbfe05-14b4-4619-9f16-470fd68b0f2a",
+      "name": "Confirm Saved",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [448, 0]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Feedback Webhook": {
+      "main": [[{ "node": "Save Feedback", "type": "main", "index": 0 }]]
+    },
+    "Save Feedback": {
+      "main": [[{ "node": "Confirm Saved", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "tags": []
+}
