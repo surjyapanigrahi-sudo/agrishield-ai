@@ -1,8 +1,9 @@
-streamlit>=1.40,<2
-ultralytics>=8.3,<9
-opencv-python-headless>=4.10,<5
-Pillow>=10,<13
-numpy>=1.26,<3
-requests>=2.32,<3
-gTTS>=2.5,<3
-click>=7.1,<8.2
+streamlit==1.64.0
+ultralytics==8.4.159
+opencv-python-headless==5.0.0.93
+Pillow==12.3.0
+numpy==2.5.3
+requests==2.34.2
+gTTS==2.5.4
+click==8.5.0
+torch==2.14.0

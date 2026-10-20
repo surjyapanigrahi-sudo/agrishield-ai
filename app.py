@@ -3,11 +3,13 @@ import requests
 from PIL import Image
 import io
 import base64
+import hashlib
 import os
 import re
 from pathlib import Path
 from gtts import gTTS
 from ultralytics import YOLO
+from PIL import UnidentifiedImageError
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -347,8 +349,16 @@ INDIAN_STATES = [
 # ---------------------------------------------------------
 # Fixed Inference Configuration
 # ---------------------------------------------------------
-model_version = st.sidebar.selectbox("Detection model", ["v3_slot1", "v2", "v1"], format_func=lambda x: {"v3_slot1": "Wheat v3 Slot 1 (Experimental)", "v2": "Wheat v2", "v1": "Wheat v1"}[x])
-confidence_threshold = 0.10
+model_version = st.sidebar.selectbox(
+    "Detection model",
+    ["v2", "v1", "v3_slot1"],
+    format_func=lambda x: {
+        "v2": "Wheat v2 (Recommended)",
+        "v1": "Wheat v1",
+        "v3_slot1": "Wheat v3 Slot 1 (Experimental)",
+    }[x],
+)
+confidence_threshold = 0.15
 
 # ---------------------------------------------------------
 # Sidebar Section 1: Farm & Crop Details
@@ -398,12 +408,29 @@ language = st.sidebar.radio(
     index=list(GTTS_LANG_CODES.keys()).index("Hindi")
 )
 
-# n8n Webhook for Multilingual Treatment Advisory Text
-N8N_WEBHOOK_URL = "https://surjyanp.app.n8n.cloud/webhook/pest-action"
+# n8n Webhooks. Override these in the deployment environment when endpoints change.
+N8N_WEBHOOK_URL = os.getenv(
+    "N8N_WEBHOOK_URL",
+    "https://surjyanp.app.n8n.cloud/webhook/pest-action",
+)
 FEEDBACK_WEBHOOK_URL = os.getenv(
     "N8N_FEEDBACK_WEBHOOK_URL",
     "https://surjyanp.app.n8n.cloud/webhook/agrishield-feedback",
 )
+
+ADVISORY_LABEL_MAP = {
+    "army_worm": "army_worm",
+    "diseases": "diseases",
+    "Healthy wheat": "Healthy wheat",
+    "wheat rust": "wheat rust",
+    "wheat smut": "wheat smut",
+    "healthy_wheat": "Healthy wheat",
+    "wheat_armyworm": "army_worm",
+    "wheat_leaf_rust": "wheat rust",
+    "wheat_stem_rust": "wheat rust",
+    "wheat_stripe_rust": "wheat rust",
+    "wheat_smut": "wheat smut",
+}
 
 # ---------------------------------------------------------
 # Local YOLO Model Caching and Loading
@@ -411,9 +438,13 @@ FEEDBACK_WEBHOOK_URL = os.getenv(
 @st.cache_resource
 def load_yolo_model(version):
     filenames = {"v1": "best_v1.pt", "v2": "best_v2.pt", "v3_slot1": "best.pt"}
-    weight_file = BASE_DIR / filenames[version]
+    requested_file = BASE_DIR / filenames.get(version, "best_v2.pt")
+    fallback_file = BASE_DIR / "best_v2.pt"
+    weight_file = requested_file if requested_file.is_file() else fallback_file
     if not weight_file.is_file():
-        raise FileNotFoundError(f"Missing {weight_file.name} in {BASE_DIR}")
+        raise FileNotFoundError(
+            f"Missing {requested_file.name} and fallback {fallback_file.name} in {BASE_DIR}"
+        )
     return YOLO(str(weight_file))
 
 try:
@@ -500,7 +531,15 @@ with col1:
     if uploaded_file is not None:
         image_bytes = uploaded_file.getvalue()
         image_filename = uploaded_file.name
-        image_to_display = Image.open(uploaded_file)
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as uploaded_image:
+                uploaded_image.verify()
+            image_to_display = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        except (UnidentifiedImageError, OSError, ValueError):
+            st.error("The uploaded file is not a valid JPG or PNG image.")
+            image_bytes = None
+            image_filename = None
+            image_to_display = None
     elif sample_path and sample_path.exists():
         with sample_path.open("rb") as f:
             image_bytes = f.read()
@@ -509,7 +548,7 @@ with col1:
 
     input_signature = (
         image_filename,
-        len(image_bytes) if image_bytes is not None else 0,
+        hashlib.sha256(image_bytes).hexdigest() if image_bytes is not None else "",
         model_version,
         confidence_threshold,
         selected_crop,
@@ -587,7 +626,7 @@ with col2:
 
                     st.caption("AI confidence (not field infestation severity)")
                     st.progress(confidence)
-                    st.info("✅ Detection passed the fixed 10% confidence threshold.")
+                    st.info("✅ Detection passed the fixed 15% confidence threshold.")
 
                 else:
                     detected_pest = "unknown"
@@ -606,41 +645,48 @@ with col3:
     st.markdown('<div class="section-label">📋 3. Treatment Advisory</div>', unsafe_allow_html=True)
     
     if detected_pest and detected_pest != "unknown":
+        advisory_pest = ADVISORY_LABEL_MAP.get(detected_pest)
         if model_version == "v3_slot1":
             st.warning("Experimental v3: advisory has not been validated for all new classes. Confirm diagnosis and treatment with a qualified agricultural expert before field use.")
-        with st.spinner(f"Retrieving advisory in {language}..."):
-            try:
-                n8n_data = fetch_advisory(
-                    detected_pest,
-                    language,
-                    selected_crop,
-                    selected_growth_stage,
-                    selected_state,
-                    selected_district.strip(),
-                )
-
-                chemical_solution = n8n_data.get("chemical", "N/A")
-                if model_version == "v3_slot1":
-                    st.caption("Unverified n8n response — for workflow testing only, not field use.")
-                st.metric(label="Chemical Solution (unverified)" if model_version == "v3_slot1" else "Chemical Solution", value=chemical_solution)
-
-                instructions = n8n_data.get("translated_instructions", "No advisory available.")
-                st.info(f"**Instructions ({language}):**\n\n{instructions}")
-
-                # --- MULTILINGUAL AUDIO TTS ---
-                st.markdown("🔊 **Listen to Local Advisory:**")
+        if advisory_pest is None:
+            st.warning(
+                "No validated treatment mapping is available for this experimental label. "
+                "Please consult a qualified agricultural expert."
+            )
+        else:
+            with st.spinner(f"Retrieving advisory in {language}..."):
                 try:
-                    tts_lang = GTTS_LANG_CODES.get(language, "en")
-                    tts_text = f"{detected_pest}. {chemical_solution}. {instructions}"
-                    audio_bytes = generate_advisory_audio(tts_text, tts_lang)
-                    st.audio(audio_bytes, format="audio/mp3")
-                except Exception:
-                    st.caption("🔊 *Audio player unavailable for selected language.*")
+                    n8n_data = fetch_advisory(
+                        advisory_pest,
+                        language,
+                        selected_crop,
+                        selected_growth_stage,
+                        selected_state,
+                        selected_district.strip(),
+                    )
 
-                st.markdown("---")
-                    
-                # --- DOWNLOADABLE FIELD REPORT ---
-                report_content = f"""==================================================
+                    chemical_solution = n8n_data.get("chemical", "N/A")
+                    if model_version == "v3_slot1":
+                        st.caption("Unverified n8n response — for workflow testing only, not field use.")
+                    st.metric(label="Chemical Solution (unverified)" if model_version == "v3_slot1" else "Chemical Solution", value=chemical_solution)
+
+                    instructions = n8n_data.get("translated_instructions", "No advisory available.")
+                    st.info(f"**Instructions ({language}):**\n\n{instructions}")
+
+                    # --- MULTILINGUAL AUDIO TTS ---
+                    st.markdown("🔊 **Listen to Local Advisory:**")
+                    try:
+                        tts_lang = GTTS_LANG_CODES.get(language, "en")
+                        tts_text = f"{detected_pest}. {chemical_solution}. {instructions}"
+                        audio_bytes = generate_advisory_audio(tts_text, tts_lang)
+                        st.audio(audio_bytes, format="audio/mp3")
+                    except Exception:
+                        st.caption("🔊 *Audio player unavailable for selected language.*")
+
+                    st.markdown("---")
+
+                    # --- DOWNLOADABLE FIELD REPORT ---
+                    report_content = f"""==================================================
 KISHAN MITRA AI - FIELD ADVISORY REPORT
 ==================================================
 Crop                       : {selected_crop}
@@ -659,19 +705,19 @@ COMMUNITY SUPPORT & HELPLINE:
 Kisan Call Center Hotline: 1800-180-1551
 ==================================================
 """
-                st.download_button(
-                    label="📥 Download Advisory Report (TXT)",
-                    data=report_content,
-                    file_name=f"Kishan_Mitra_Advisory_{detected_pest}.txt",
-                    mime="text/plain"
-                )
+                    st.download_button(
+                        label="📥 Download Advisory Report (TXT)",
+                        data=report_content,
+                        file_name=f"Kishan_Mitra_Advisory_{detected_pest}.txt",
+                        mime="text/plain"
+                    )
 
-            except Exception as e:
-                st.error("Error communicating with n8n advisory agent.")
-                st.caption(f"Details: {e}")
+                except Exception as e:
+                    st.error("Error communicating with n8n advisory agent.")
+                    st.caption(f"Details: {e}")
 
     elif detected_pest == "unknown":
-        st.info("💡 **No detection above 10%:** Try a clearer close-up or select a different sample image.")
+        st.info("💡 **No detection above 15%:** Try a clearer close-up or select a different sample image.")
 
 if st.session_state.get("last_detection"):
     with st.expander("💬 Farmer Feedback"):
